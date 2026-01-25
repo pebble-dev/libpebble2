@@ -100,7 +100,7 @@ class PebblePacket(with_metaclass(PacketType)):
            command = Uint8(default=0x01)
            response = Uint8(enum=AppFetchStatus)
 
-    :param \*\*kwargs: Initial values for any properties on the object.
+    :param \\*\\*kwargs: Initial values for any properties on the object.
     """
     def __init__(self, **kwargs):
         for k, v in iteritems(kwargs):
