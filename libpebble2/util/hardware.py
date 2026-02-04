@@ -21,6 +21,8 @@ class PebbleHardware(object):
     OBELIX_EVT = 16
     OBELIX_DVT = 17
     OBELIX_PVT = 18
+    GETAFIX_EVT = 19
+    GETAFIX_DVT = 20
 
     TINTIN_BB = 0xFF
     TINTIN_BB2 = 0xFE
@@ -35,6 +37,7 @@ class PebbleHardware(object):
     SNOWY_ROBERT = 0xF5
     OBELIX_BB = 0xF4
     OBELIX_BB2 = 0xF3
+    SPALDING_GABBRO = 0xF2
 
     PLATFORMS = {
         UNKNOWN: 'unknown',
@@ -69,6 +72,9 @@ class PebbleHardware(object):
         SNOWY_ROBERT: 'emery',
         OBELIX_BB: 'emery',
         OBELIX_BB2: 'emery',
+        SPALDING_GABBRO: 'gabbro',
+        GETAFIX_EVT: 'gabbro',
+        GETAFIX_DVT: 'gabbro',
     }
 
     @classmethod

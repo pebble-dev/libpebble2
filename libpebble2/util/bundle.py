@@ -42,6 +42,7 @@ class PebbleBundle(object):
         'diorite': ('diorite/', 'aplite/', ''),
         'emery': ('emery/', 'basalt/', ''),
         'flint': ('flint/', 'diorite/', 'aplite/', ''),
+        'gabbro': ('gabbro/', 'chalk/'),
     }
 
     MAX_COMPATIBILITY_VERSIONS = {
@@ -49,6 +50,7 @@ class PebbleBundle(object):
         'diorite': {'aplite/': 0x50, '': 0x16},
         'emery': {'basalt/': 0x54, '': 0x16},
         'flint': {'aplite/': 0x50, '': 0x16},
+        'gabbro': {'chalk/': 0x54},
     }
 
     def __init__(self, bundle_path, hardware=PebbleHardware.UNKNOWN):
