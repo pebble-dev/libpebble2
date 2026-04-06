@@ -125,6 +125,11 @@ class WebSocketTimelinePin(PebblePacket):
     })
 
 
+class WebSocketSpoofedLocation(PebblePacket):
+    latitude = Double()
+    longitude = Double()
+
+
 class WebSocketTimelineResponse(PebblePacket):
     class Status(IntEnum):
         Succeeded = 0x00
@@ -139,7 +144,8 @@ to_watch = {
     0x09: WebSocketProxyAuthenticationRequest,
     0x0a: WebSocketPhonesimAppConfig,
     0x0b: WebSocketRelayQemu,
-    0x0c: WebSocketTimelinePin
+    0x0c: WebSocketTimelinePin,
+    0x0d: WebSocketSpoofedLocation,
 }
 
 from_watch = {
