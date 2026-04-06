@@ -151,6 +151,13 @@ class Uint64(Field):
     struct_format = 'Q'
 
 
+class Double(Field):
+    """
+    Represents a ``double_t``.
+    """
+    struct_format = 'd'
+
+
 class Boolean(Field):
     """
     Represents a ``bool``.
