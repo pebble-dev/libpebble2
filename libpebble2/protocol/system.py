@@ -122,12 +122,34 @@ class WatchVersionRequest(PebblePacket):
 
 
 class WatchFirmwareVersion(PebblePacket):
+    class Flags(IntEnum):
+        Recovery = 1 << 0
+        BLE = 1 << 1
+        DualSlot = 1 << 2
+        Slot0 = 1 << 3
+
     timestamp = Uint32()
     version_tag = FixedString(32)
     git_hash = FixedString(8)
-    is_recovery = Boolean()
+    flags = Uint8(default=0)
     hardware_platform = Uint8()
     metadata_version = Uint8()
+
+    def _get_flag(self, flag):
+        return bool((self.flags or 0) & flag)
+
+    def _set_flag(self, flag, value):
+        if value:
+            self.flags = (self.flags or 0) | flag
+        else:
+            self.flags = (self.flags or 0) & ~flag
+
+    is_recovery = property(lambda self: self._get_flag(self.Flags.Recovery),
+                           lambda self, v: self._set_flag(self.Flags.Recovery, v))
+    is_dual_slot = property(lambda self: self._get_flag(self.Flags.DualSlot),
+                            lambda self, v: self._set_flag(self.Flags.DualSlot, v))
+    is_slot_0 = property(lambda self: self._get_flag(self.Flags.Slot0),
+                         lambda self, v: self._set_flag(self.Flags.Slot0, v))
 
 
 class WatchVersionResponse(PebblePacket):
@@ -188,8 +210,8 @@ class Reset(PebblePacket):
     class Command(IntEnum):
         Reset = 0x00
         DumpCore = 0x01
-        FactoryReset = 0x02
-        PRF = 0x03
+        FactoryReset = 0xfe
+        PRF = 0xff
 
     command = Uint8(enum=Command)
 
