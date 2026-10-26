@@ -188,8 +188,8 @@ class Reset(PebblePacket):
     class Command(IntEnum):
         Reset = 0x00
         DumpCore = 0x01
-        FactoryReset = 0x02
-        PRF = 0x03
+        FactoryReset = 0xfe
+        PRF = 0xff
 
     command = Uint8(enum=Command)
 
