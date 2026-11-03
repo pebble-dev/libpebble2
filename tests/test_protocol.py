@@ -757,3 +757,17 @@ def test_unbounded_length_array():
 
     result = Foo(array=b'hello world').serialise()
     assert result == b'hello world'
+
+
+def test_meta_survives_garbage_collection():
+    import gc
+
+    class MetaPacket(PebblePacket):
+        class Meta:
+            endpoint = 0x1234
+            endianness = '<'
+            register = False
+        value = Uint16()
+
+    gc.collect()
+    assert MetaPacket(value=1).serialise_packet() == unhex('000212340100')

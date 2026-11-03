@@ -36,8 +36,9 @@ class PacketType(type):
         if '_Meta' in dct:
             del dct['_Meta']
         # If we have a Meta property, move it to _Meta. This effectively prevents it being inherited.
+        # Copy its attributes: the class goes away, and the garbage collector may empty its __dict__.
         if 'Meta' in dct:
-            dct['_Meta'] = dct['Meta'].__dict__
+            dct['_Meta'] = dict(dct['Meta'].__dict__)
             del dct['Meta']
 
         # For each Field, add it to our mapping, then set the exposed value to its default value.
