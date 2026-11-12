@@ -23,6 +23,7 @@ class PebbleHardware(object):
     OBELIX_PVT = 18
     GETAFIX_EVT = 19
     GETAFIX_DVT = 20
+    GETAFIX_DVT2 = 21
 
     TINTIN_BB = 0xFF
     TINTIN_BB2 = 0xFE
@@ -75,6 +76,7 @@ class PebbleHardware(object):
         SPALDING_GABBRO: 'gabbro',
         GETAFIX_EVT: 'gabbro',
         GETAFIX_DVT: 'gabbro',
+        GETAFIX_DVT2: 'gabbro',
     }
 
     @classmethod
