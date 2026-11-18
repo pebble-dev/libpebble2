@@ -165,6 +165,11 @@ class WatchVersionResponse(PebblePacket):
     language_version = Uint16()
     capabilities = Uint64(endianness='<')
     is_unfaithful = Optional(Boolean())
+    health_insights_version = Optional(Uint16())
+    javascript_version = Optional(Uint16())
+    #: What the watch's platform is like, when ``capabilities`` says so: see
+    #: :meth:`libpebble2.util.platform.Platform.from_watch`.
+    platform_info = Optional(BinaryArray())
 
 
 class WatchVersion(PebblePacket):

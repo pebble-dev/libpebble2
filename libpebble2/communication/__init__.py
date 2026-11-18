@@ -16,6 +16,7 @@ from libpebble2.protocol.base import PebblePacket, PacketType
 from libpebble2.protocol.system import (PhoneAppVersion, AppVersionResponse, WatchVersion, WatchVersionRequest,
                                         WatchVersionResponse, WatchModel, ModelRequest, Model)
 from libpebble2.util.hardware import PebbleHardware
+from libpebble2.util.platform import Platform, platform_for_hardware
 
 logger = logging.getLogger("libpebble2.communication")
 
@@ -378,7 +379,8 @@ class PebbleConnection(object):
     @property
     def watch_platform(self):
         """
-        A string naming the platform of the watch ('aplite', 'basalt', 'chalk', or 'unknown').
+        A string naming the platform of the watch ('aplite', 'basalt', 'chalk', ..., or 'unknown'). A watch
+        that describes its platform names it itself, so this may be a name this library has never heard of.
 
         .. note:
            This is a blocking call if :meth:`fetch_watch_info` has not yet been called, which could lead to deadlock
@@ -386,4 +388,22 @@ class PebbleConnection(object):
 
         :rtype: str
         """
-        return PebbleHardware.hardware_platform(self.watch_info.running.hardware_platform)
+        platform = self.watch_platform_info
+        return platform.name if platform is not None else 'unknown'
+
+    @property
+    def watch_platform_info(self):
+        """
+        What the platform of the watch is like: its display, app memory and what it has. Recent firmware
+        describes it; for older firmware it follows from the hardware revision. ``None`` for hardware this
+        library does not know that does not describe it.
+
+        .. note:
+           This is a blocking call if :meth:`fetch_watch_info` has not yet been called, which could lead to deadlock
+           if called in an endpoint callback.
+
+        :rtype: .Platform
+        """
+        info = self.watch_info
+        return (Platform.from_watch(info.capabilities, info.platform_info)
+                or platform_for_hardware(info.running.hardware_platform))
