@@ -40,7 +40,8 @@ class AppInstaller(EventSourceMixin):
         self._prepare(pbw_path)
 
     def _prepare(self, pbw_path):
-        self._bundle = PebbleBundle(pbw_path, hardware=self._pebble.watch_info.running.hardware_platform)
+        self._bundle = PebbleBundle(pbw_path, hardware=self._pebble.watch_info.running.hardware_platform,
+                                    platform=self._pebble.watch_platform_info)
         if not self._bundle.is_app_bundle:
             raise AppInstallError("This is not an app bundle.")
 

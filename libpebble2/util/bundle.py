@@ -8,6 +8,7 @@ import uuid
 import zipfile
 
 from .hardware import PebbleHardware
+from .platform import KNOWN_PLATFORMS, Platform, compatible_directories, platform_for_hardware
 
 __all__ = ["PebbleBundle"]
 
@@ -53,8 +54,17 @@ class PebbleBundle(object):
         'gabbro': {'chalk/': 0x54},
     }
 
-    def __init__(self, bundle_path, hardware=PebbleHardware.UNKNOWN):
+    def __init__(self, bundle_path, hardware=PebbleHardware.UNKNOWN, platform=None):
+        """
+        :param bundle_path: Path of the bundle.
+        :param hardware: The hardware revision of the watch the bundle is for.
+        :param platform: What the watch's platform is like, when the watch describes it; it then decides
+                         which of the bundle's binaries is used, rather than ``hardware``.
+        :type platform: .Platform
+        """
         self.hardware = hardware
+        self.platform = platform or platform_for_hardware(hardware)
+        self._prefixes = None
         bundle_abs_path = os.path.abspath(bundle_path)
         if not os.path.exists(bundle_abs_path):
             raise Exception("Bundle does not exist: " + bundle_path)
@@ -75,30 +85,71 @@ class PebbleBundle(object):
         platform = PebbleHardware.hardware_platform(hardware)
         return cls.PLATFORM_PATHS[platform]
 
+    def get_platforms(self):
+        """
+        The platform each directory of the bundle is for, by directory prefix (``"emery/"``, or ``""`` for the
+        root). A directory's manifest describes its platform; one that does not is of the platform it is named
+        after.
+
+        :rtype: dict[str, .Platform]
+        """
+        platforms = {}
+        for name in self._zip_contents:
+            prefix, _, filename = name.rpartition('/')
+            if filename != self.MANIFEST_FILENAME or '/' in prefix:
+                continue
+            prefix = prefix + '/' if prefix else ''
+            try:
+                manifest = json.loads(self.zip.read(name).decode('utf-8'))
+            except ValueError:
+                continue
+            # A binary at the root is from before pbws had directories.
+            platform = (Platform.from_manifest(manifest.get('platform'))
+                        or KNOWN_PLATFORMS.get(prefix.rstrip('/') or 'aplite'))
+            if platform is not None:
+                platforms[prefix] = platform
+        return platforms
+
+    def _get_prefixes(self):
+        """The directories to take files from, best first."""
+        if self._prefixes is None:
+            if self.platform is None:
+                self._prefixes = self.PLATFORM_PATHS['unknown']
+            elif self.platform.name in self.PLATFORM_PATHS:
+                # What the platform has always taken.
+                self._prefixes = self.PLATFORM_PATHS[self.platform.name]
+            else:
+                self._prefixes = tuple(compatible_directories(self.platform, self.get_platforms()))
+        return self._prefixes
+
     def get_real_path(self, path):
         if path in self.UNIVERSAL_FILES:
             return path
         else:
-            prefixes = self.prefixes_for_hardware(self.hardware)
-            for prefix in prefixes:
+            for prefix in self._get_prefixes():
                 real_path = prefix + path
                 if real_path in self._zip_contents:
                     return real_path
             return None
 
     def _get_real_prefix(self):
-        prefixes = self.prefixes_for_hardware(self.hardware)
-        for prefix in prefixes:
+        for prefix in self._get_prefixes():
             real_path = prefix + self.MANIFEST_FILENAME
             if real_path in self._zip_contents:
                 return prefix
         return None
 
     def should_permit_install(self):
-        platform = PebbleHardware.hardware_platform(self.hardware)
+        """Whether the bundle has a binary meant for the watch. A binary that merely fits the watch does not
+        count: an app that leaves the watch's platform out says it is not for that watch."""
+        platform = self.platform.name if self.platform else 'unknown'
         prefix = self._get_real_prefix()
         if prefix is None:
             return False
+        if platform not in self.PLATFORM_PATHS:
+            # A platform that only the watch has described: its own binary, or one for its very display.
+            built_for = self.get_platforms()[prefix]
+            return built_for.name == platform or built_for.same_display(self.platform)
         if platform in self.MAX_COMPATIBILITY_VERSIONS:
             max_version = self.MAX_COMPATIBILITY_VERSIONS[platform].get(prefix, None)
             if max_version is None:

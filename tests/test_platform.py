@@ -3,10 +3,12 @@ from __future__ import absolute_import
 import json
 import os
 import struct
+import zipfile
 
 import pytest
 
 from libpebble2.protocol.system import WatchVersionResponse
+from libpebble2.util.bundle import PebbleBundle
 from libpebble2.util.hardware import PebbleHardware
 from libpebble2.util.platform import (KNOWN_PLATFORMS, Platform, compatible_directories,
                                       platform_for_hardware)
@@ -41,6 +43,58 @@ def test_root_is_aplite_and_comes_last():
 def test_platform_for_hardware():
     assert platform_for_hardware(PebbleHardware.SNOWY_DVT).name == 'basalt'
     assert platform_for_hardware(0x7f) is None
+
+
+def _pbw(tmp_path, directories):
+    path = str(tmp_path / 'app.pbw')
+    with zipfile.ZipFile(path, 'w') as z:
+        z.writestr('appinfo.json', '{}')
+        for prefix, platform in directories.items():
+            manifest = {'application': {'name': 'pebble-app.bin'}}
+            if platform is not None:
+                manifest['platform'] = platform
+            z.writestr(prefix + 'manifest.json', json.dumps(manifest))
+            # Enough of a header for the SDK version to be read: 5.0.
+            z.writestr(prefix + 'pebble-app.bin', struct.pack('<8s2B2B', b'PBLAPP', 16, 0, 5, 0).ljust(200, b'\0'))
+    return path
+
+
+def test_bundle_reads_described_platforms(tmp_path):
+    path = _pbw(tmp_path, {'slate/': TABLE['platforms']['slate'], 'emery/': None, 'basalt/': None})
+
+    bundle = PebbleBundle(path, platform=SLATE)
+    assert bundle.get_platforms()['slate/'] == SLATE
+    assert bundle.get_platforms()['emery/'] == KNOWN_PLATFORMS['emery']
+    assert bundle.get_app_path() == 'slate/pebble-app.bin'
+    assert bundle.should_permit_install()
+
+    # A watch that only says what hardware it is still gets its binary.
+    assert PebbleBundle(path, hardware=PebbleHardware.SNOWY_DVT).get_app_path() == 'basalt/pebble-app.bin'
+    # And one nothing is known about gets none.
+    assert PebbleBundle(path).get_real_path('pebble-app.bin') is None
+
+
+def test_known_watches_take_what_they_took(tmp_path):
+    path = _pbw(tmp_path, {'flint/': None, 'aplite/': None, 'chalk/': None})
+    # Emery runs Flint's apps, but the pbw was not built for it.
+    emery = PebbleBundle(path, platform=KNOWN_PLATFORMS['emery'])
+    assert emery.get_real_path('pebble-app.bin') is None
+    assert not emery.should_permit_install()
+    # Flint always took Aplite's.
+    flint = PebbleBundle(_pbw(tmp_path, {'aplite/': None}), platform=KNOWN_PLATFORMS['flint'])
+    assert flint.get_app_path() == 'aplite/pebble-app.bin'
+
+
+def test_new_platform_wants_its_own_binary(tmp_path):
+    path = _pbw(tmp_path, {'emery/': None, 'basalt/': None})
+    slate = PebbleBundle(path, platform=SLATE)
+    assert slate.get_app_path() == 'emery/pebble-app.bin'
+    assert not slate.should_permit_install()
+    # One built for the very display of the watch is as good as its own.
+    path = _pbw(tmp_path, {'granite/': TABLE['platforms']['granite'], 'emery/': None})
+    slate = PebbleBundle(path, platform=SLATE)
+    assert slate.get_app_path() == 'granite/pebble-app.bin'
+    assert slate.should_permit_install()
 
 
 def _version_response(capabilities, trailer=b''):
