@@ -76,13 +76,19 @@ def test_bundle_reads_described_platforms(tmp_path):
 
 def test_known_watches_take_what_they_took(tmp_path):
     path = _pbw(tmp_path, {'flint/': None, 'aplite/': None, 'chalk/': None})
-    # Emery runs Flint's apps, but the pbw was not built for it.
+    # Emery runs Flint's apps, but the pbw was not built for it: only when asked for any fit.
     emery = PebbleBundle(path, platform=KNOWN_PLATFORMS['emery'])
     assert emery.get_real_path('pebble-app.bin') is None
     assert not emery.should_permit_install()
+    emery = PebbleBundle(path, platform=KNOWN_PLATFORMS['emery'], any_fit=True)
+    assert emery.get_app_path() == 'flint/pebble-app.bin'
+    assert emery.should_permit_install()
     # Flint always took Aplite's.
     flint = PebbleBundle(_pbw(tmp_path, {'aplite/': None}), platform=KNOWN_PLATFORMS['flint'])
     assert flint.get_app_path() == 'aplite/pebble-app.bin'
+    # The frozen platforms take nothing else, asked or not.
+    basalt = PebbleBundle(path, platform=KNOWN_PLATFORMS['basalt'], any_fit=True)
+    assert basalt.get_real_path('pebble-app.bin') is None
 
 
 def test_new_platform_wants_its_own_binary(tmp_path):
@@ -90,6 +96,7 @@ def test_new_platform_wants_its_own_binary(tmp_path):
     slate = PebbleBundle(path, platform=SLATE)
     assert slate.get_app_path() == 'emery/pebble-app.bin'
     assert not slate.should_permit_install()
+    assert PebbleBundle(path, platform=SLATE, any_fit=True).should_permit_install()
     # One built for the very display of the watch is as good as its own.
     path = _pbw(tmp_path, {'granite/': TABLE['platforms']['granite'], 'emery/': None})
     slate = PebbleBundle(path, platform=SLATE)

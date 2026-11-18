@@ -46,6 +46,9 @@ class PebbleBundle(object):
         'gabbro': ('gabbro/', 'chalk/'),
     }
 
+    #: Platforms no firmware is built for anymore.
+    FROZEN_PLATFORMS = ('aplite', 'basalt', 'chalk', 'diorite')
+
     MAX_COMPATIBILITY_VERSIONS = {
         'basalt': {'': 0x16},
         'diorite': {'aplite/': 0x50, '': 0x16},
@@ -54,16 +57,20 @@ class PebbleBundle(object):
         'gabbro': {'chalk/': 0x54},
     }
 
-    def __init__(self, bundle_path, hardware=PebbleHardware.UNKNOWN, platform=None):
+    def __init__(self, bundle_path, hardware=PebbleHardware.UNKNOWN, platform=None, any_fit=False):
         """
         :param bundle_path: Path of the bundle.
         :param hardware: The hardware revision of the watch the bundle is for.
         :param platform: What the watch's platform is like, when the watch describes it; it then decides
                          which of the bundle's binaries is used, rather than ``hardware``.
         :type platform: .Platform
+        :param any_fit: Take the best of all the binaries the watch can run, rather than only one built
+                        for its platform or one its platform has always taken.
+        :type any_fit: bool
         """
         self.hardware = hardware
         self.platform = platform or platform_for_hardware(hardware)
+        self.any_fit = any_fit
         self._prefixes = None
         bundle_abs_path = os.path.abspath(bundle_path)
         if not os.path.exists(bundle_abs_path):
@@ -110,13 +117,16 @@ class PebbleBundle(object):
                 platforms[prefix] = platform
         return platforms
 
+    def _is_frozen(self):
+        return self.platform.name in self.FROZEN_PLATFORMS
+
     def _get_prefixes(self):
         """The directories to take files from, best first."""
         if self._prefixes is None:
             if self.platform is None:
                 self._prefixes = self.PLATFORM_PATHS['unknown']
-            elif self.platform.name in self.PLATFORM_PATHS:
-                # What the platform has always taken.
+            elif self._is_frozen() or (not self.any_fit and self.platform.name in self.PLATFORM_PATHS):
+                # What the platform has always taken. Firmware of the frozen ones takes nothing else.
                 self._prefixes = self.PLATFORM_PATHS[self.platform.name]
             else:
                 self._prefixes = tuple(compatible_directories(self.platform, self.get_platforms()))
@@ -140,12 +150,14 @@ class PebbleBundle(object):
         return None
 
     def should_permit_install(self):
-        """Whether the bundle has a binary meant for the watch. A binary that merely fits the watch does not
-        count: an app that leaves the watch's platform out says it is not for that watch."""
+        """Whether the bundle has a binary meant for the watch. Without ``any_fit``, a binary that merely fits
+        the watch does not count: an app that leaves the watch's platform out says it is not for that watch."""
         platform = self.platform.name if self.platform else 'unknown'
         prefix = self._get_real_prefix()
         if prefix is None:
             return False
+        if self.any_fit:
+            return True
         if platform not in self.PLATFORM_PATHS:
             # A platform that only the watch has described: its own binary, or one for its very display.
             built_for = self.get_platforms()[prefix]

@@ -28,9 +28,13 @@ class AppInstaller(EventSourceMixin):
     :param blobdb_client: An optional :class:`BlobDBClient` to use, if one already exists. If omitted, one will be
                           created.
     :type blobdb_client: .BlobDBClient
+    :param any_fit: Install the best of all the binaries the watch can run, rather than only one built for its
+                    platform or one its platform has always taken.
+    :type any_fit: bool
     """
-    def __init__(self, pebble, pbw_path, blobdb_client=None):
+    def __init__(self, pebble, pbw_path, blobdb_client=None, any_fit=False):
         self._pebble = pebble
+        self._any_fit = any_fit
         self._blobdb = blobdb_client or BlobDBClient(pebble)
         EventSourceMixin.__init__(self)
         #: Total number of bytes sent so far.
@@ -41,7 +45,7 @@ class AppInstaller(EventSourceMixin):
 
     def _prepare(self, pbw_path):
         self._bundle = PebbleBundle(pbw_path, hardware=self._pebble.watch_info.running.hardware_platform,
-                                    platform=self._pebble.watch_platform_info)
+                                    platform=self._pebble.watch_platform_info, any_fit=self._any_fit)
         if not self._bundle.is_app_bundle:
             raise AppInstallError("This is not an app bundle.")
 
