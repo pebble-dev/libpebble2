@@ -125,9 +125,16 @@ class PebbleBundle(object):
         if self._prefixes is None:
             if self.platform is None:
                 self._prefixes = self.PLATFORM_PATHS['unknown']
-            elif self._is_frozen() or (not self.any_fit and self.platform.name in self.PLATFORM_PATHS):
-                # What the platform has always taken. Firmware of the frozen ones takes nothing else.
+            elif self._is_frozen():
+                # What the platform has always taken: its firmware takes nothing else.
                 self._prefixes = self.PLATFORM_PATHS[self.platform.name]
+            elif not self.any_fit and self.platform.name in self.PLATFORM_PATHS:
+                # What the platform has always taken, and after its own binary the flexible ones, which
+                # are built for every watch like it.
+                always = self.PLATFORM_PATHS[self.platform.name]
+                flexible = {d: p for d, p in self.get_platforms().items() if p.flexible}
+                self._prefixes = (always[:1] + tuple(compatible_directories(self.platform, flexible))
+                                  + always[1:])
             else:
                 self._prefixes = tuple(compatible_directories(self.platform, self.get_platforms()))
         return self._prefixes
@@ -159,9 +166,11 @@ class PebbleBundle(object):
         if self.any_fit:
             return True
         if platform not in self.PLATFORM_PATHS:
-            # A platform that only the watch has described: its own binary, or one for its very display.
+            # A platform that only the watch has described: its own binary, one for its very display, or
+            # a flexible one of its colour depth.
             built_for = self.get_platforms()[prefix]
-            return built_for.name == platform or built_for.same_display(self.platform)
+            return (built_for.name == platform or built_for.same_display(self.platform)
+                    or (built_for.flexible and built_for.color == self.platform.color))
         if platform in self.MAX_COMPATIBILITY_VERSIONS:
             max_version = self.MAX_COMPATIBILITY_VERSIONS[platform].get(prefix, None)
             if max_version is None:

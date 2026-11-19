@@ -28,6 +28,11 @@ class Platform(object):
     :type abi: str
     :param features: Names of what the watch has, e.g. ``"microphone"``.
     :type features: tuple
+    :param flexible: Whether this is a binary built for every display of its shape and colour
+                     depth. It has no ``width`` and ``height``.
+    :type flexible: bool
+    :param requires: Names of the features a flexible binary cannot run without.
+    :type requires: tuple
     """
     FEATURES = ("microphone", "smartstrap", "smartstrap_power", "health", "compass", "touch",
                 "rgb_backlight", "speaker")
@@ -39,7 +44,7 @@ class Platform(object):
     _WATCH_INFO = struct.Struct('>BBBBHHIHBB16s')
 
     def __init__(self, name, width, height, shape="rect", color=False, app_memory=0x10000,
-                 abi="armv7m", features=()):
+                 abi="armv7m", features=(), flexible=False, requires=()):
         self.name = name
         self.width = width
         self.height = height
@@ -48,6 +53,8 @@ class Platform(object):
         self.app_memory = app_memory
         self.abi = abi
         self.features = tuple(features)
+        self.flexible = flexible
+        self.requires = tuple(requires)
 
     @classmethod
     def from_manifest(cls, platform):
@@ -55,6 +62,11 @@ class Platform(object):
         describe one that can be read."""
         try:
             display = platform['display']
+            if platform.get('flexible') is True:
+                return cls(str(platform['name']), None, None, str(display['shape']),
+                           bool(display['color']), int(platform['limits']['app_memory']),
+                           str(platform['abi']), flexible=True,
+                           requires=[str(f) for f in platform.get('requires', ())])
             return cls(str(platform['name']), int(display['width']), int(display['height']),
                        str(display['shape']), bool(display['color']),
                        int(platform['limits']['app_memory']), str(platform['abi']),
@@ -87,15 +99,21 @@ class Platform(object):
     def fits(self, watch):
         """Whether a watch of the given platform runs a binary built for this one: the same ABI
         and shape, a display no larger than the watch's, no colour on a black and white display
-        and no more app memory than the watch gives."""
-        return (self.abi == watch.abi and self.abi in self.ABIS.values()
+        and no more app memory than the watch gives. A flexible binary has no display size, and
+        the watch has to have every feature it requires."""
+        if not (self.abi == watch.abi and self.abi in self.ABIS.values()
                 and self.shape == watch.shape and self.shape in self.SHAPES.values()
-                and self.width <= watch.width and self.height <= watch.height
                 and (watch.color or not self.color)
-                and self.app_memory <= watch.app_memory)
+                and self.app_memory <= watch.app_memory):
+            return False
+        if self.flexible:
+            # A feature this library does not know is one the watch does not have.
+            return set(self.requires) <= set(watch.features)
+        return self.width <= watch.width and self.height <= watch.height
 
     def same_display(self, other):
-        return ((self.width, self.height, self.shape, self.color)
+        return (not self.flexible and not other.flexible
+                and (self.width, self.height, self.shape, self.color)
                 == (other.width, other.height, other.shape, other.color))
 
     def __eq__(self, other):
@@ -105,6 +123,10 @@ class Platform(object):
         return not self == other
 
     def __repr__(self):
+        if self.flexible:
+            return "Platform({!r}, flexible, {}, {}, {} bytes, {}, requires {})".format(
+                self.name, self.shape, 'color' if self.color else 'bw', self.app_memory, self.abi,
+                list(self.requires))
         return "Platform({!r}, {}x{}, {}, {}, {} bytes, {})".format(
             self.name, self.width, self.height, self.shape, 'color' if self.color else 'bw',
             self.app_memory, self.abi)
@@ -136,7 +158,8 @@ def platform_for_hardware(hardware):
 def compatible_directories(watch, directories):
     """
     The directories of a pbw a watch can take an app from, best first: that of its own platform,
-    then one for its very display, the largest display, its colour depth, the newest platform.
+    then one for its very display, a flexible binary of its colour depth (of several the one that
+    requires the most features), the largest display, its colour depth, the newest platform.
 
     :param watch: The watch's platform.
     :type watch: Platform
@@ -147,10 +170,14 @@ def compatible_directories(watch, directories):
     """
     def rank(item):
         prefix, platform = item
+        # A flexible binary draws to the whole display.
+        drawn = watch if platform.flexible else platform
         return (
             platform.name != watch.name,
             not platform.same_display(watch),
-            -(platform.width * platform.height),
+            not (platform.flexible and platform.color == watch.color),
+            -len(platform.requires),
+            -(drawn.width * drawn.height),
             platform.color != watch.color,
             # A platform this library has not heard of is newer than those it has.
             -(_AGE.index(platform.name) if platform.name in _AGE else len(_AGE)),

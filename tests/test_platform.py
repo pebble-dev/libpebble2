@@ -24,7 +24,8 @@ SLATE = PLATFORMS['slate']
 
 @pytest.mark.parametrize("case", TABLE['cases'], ids=lambda case: case['name'])
 def test_fit_cases(case):
-    directories = {name + '/': PLATFORMS[name] for name in case['binaries']}
+    # A directory is named after its platform, which the table may list under another key.
+    directories = {PLATFORMS[key].name + '/': PLATFORMS[key] for key in case['binaries']}
     best = compatible_directories(PLATFORMS[case['watch']], directories)
     assert [d.rstrip('/') for d in best] == case['expected']
 
@@ -33,6 +34,19 @@ def test_known_platforms_are_the_tables():
     assert [name for name in TABLE['age']] == sorted(KNOWN_PLATFORMS, key=TABLE['age'].index)
     for name in TABLE['age']:
         assert KNOWN_PLATFORMS[name] == PLATFORMS[name]
+
+
+def test_flexible_manifest():
+    flexible = Platform.from_manifest(TABLE['platforms']['rect-color+mic'])
+    assert flexible.flexible and flexible.requires == ('microphone',)
+    assert flexible.width is None and flexible.height is None
+    assert flexible.fits(KNOWN_PLATFORMS['emery'])
+    assert not flexible.fits(SLATE)                       # no microphone
+    assert not flexible.fits(KNOWN_PLATFORMS['gabbro'])   # round
+    assert not flexible.same_display(KNOWN_PLATFORMS['emery'])
+    # Without the mark a display without a size is one that cannot be read.
+    unmarked = dict(TABLE['platforms']['rect-color'], flexible=False)
+    assert Platform.from_manifest(unmarked) is None
 
 
 def test_root_is_aplite_and_comes_last():
@@ -137,3 +151,32 @@ def test_unknown_values_fit_nothing():
     assert (odd.abi, odd.shape) == ('unknown', 'unknown')
     assert odd.features == Platform.FEATURES
     assert compatible_directories(odd, {'emery/': KNOWN_PLATFORMS['emery'], 'odd/': odd}) == []
+
+
+def test_flexible_binaries_in_a_bundle(tmp_path):
+    table = TABLE['platforms']
+    path = _pbw(tmp_path, {'rect-color/': table['rect-color'], 'rect-color+mic/': table['rect-color+mic'],
+                           'rect-bw/': table['rect-bw'], 'emery/': None, 'basalt/': None, 'flint/': None})
+
+    # A watch takes the binary of its own platform first, then the flexible one that requires the most.
+    emery = PebbleBundle(path, platform=KNOWN_PLATFORMS['emery'])
+    assert emery._get_prefixes() == ('emery/', 'rect-color+mic/', 'rect-color/', 'rect-bw/', 'basalt/', '')
+    assert emery.should_permit_install()
+    flint = PebbleBundle(path, platform=KNOWN_PLATFORMS['flint'])
+    assert flint._get_prefixes() == ('flint/', 'rect-bw/', 'diorite/', 'aplite/', '')
+    # A frozen watch takes what it took.
+    assert PebbleBundle(path, hardware=PebbleHardware.SNOWY_DVT)._get_prefixes() == ('basalt/', '')
+
+    # Slate has no microphone and no binary of its own: the plain flexible one is meant for it.
+    slate = PebbleBundle(path, platform=SLATE)
+    assert slate.get_app_path() == 'rect-color/pebble-app.bin'
+    assert slate.should_permit_install()
+
+
+def test_flexible_binary_alone(tmp_path):
+    path = _pbw(tmp_path, {'rect-color+mic/': TABLE['platforms']['rect-color+mic']})
+    assert PebbleBundle(path, platform=KNOWN_PLATFORMS['emery']).get_app_path() == 'rect-color+mic/pebble-app.bin'
+    # No microphone, round, black and white: not offered, even when asked for any fit.
+    for watch in (SLATE, KNOWN_PLATFORMS['gabbro'], KNOWN_PLATFORMS['flint']):
+        assert PebbleBundle(path, platform=watch, any_fit=True).get_real_path('pebble-app.bin') is None
+        assert not PebbleBundle(path, platform=watch).should_permit_install()
